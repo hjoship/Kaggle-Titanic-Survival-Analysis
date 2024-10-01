@@ -120,21 +120,35 @@ if df is not None:
     fig_age = px.histogram(df_filtered, x='Age', nbins=20, title="Age Distribution")
     st.plotly_chart(fig_age)
 
-    st.header("Feature Importance")
-    feature_cols = ['Pclass', 'Sex', 'Age', 'SibSp', 'Parch', 'Fare']
+    st.header("Feature Importance and Survival Probability")
+    feature_cols = ['Pclass', 'Sex', 'Age', 'SibSp', 'Parch', 'Fare', 'Embarked']
+
+    # Separate categorical and numerical columns
+    cat_cols = ['Sex', 'Embarked']
+    num_cols = ['Pclass', 'Age', 'SibSp', 'Parch', 'Fare']
 
     X = df[feature_cols].copy()
     y = df['Survived']
 
-    imputer = SimpleImputer(strategy='median')
-    X = pd.DataFrame(imputer.fit_transform(X), columns=X.columns)
-
+    # Handle categorical data
     le = LabelEncoder()
-    X['Sex'] = le.fit_transform(X['Sex'])
+    X[cat_cols] = X[cat_cols].apply(lambda col: le.fit_transform(col.astype(str)))
 
+    # Impute missing values
+    cat_imputer = SimpleImputer(strategy='most_frequent')
+    num_imputer = SimpleImputer(strategy='median')
+
+    X[cat_cols] = cat_imputer.fit_transform(X[cat_cols])
+    X[num_cols] = num_imputer.fit_transform(X[num_cols])
+
+    # Combine processed data
+    X_processed = pd.concat([X[cat_cols], X[num_cols]], axis=1)
+
+    # Train the model
     rf_model = RandomForestClassifier(n_estimators=100, random_state=42)
-    rf_model.fit(X, y)
+    rf_model.fit(X_processed, y)
 
+    # Feature Importance
     feature_importance = pd.DataFrame({'feature': feature_cols, 'importance': rf_model.feature_importances_})
     feature_importance = feature_importance.sort_values('importance', ascending=False)
     fig_importance = px.bar(feature_importance, x='feature', y='importance', title="Feature Importance")
@@ -149,6 +163,7 @@ if df is not None:
     input_sibsp = st.slider("Number of Siblings/Spouses Aboard", 0, 8, 0)
     input_parch = st.slider("Number of Parents/Children Aboard", 0, 6, 0)
     input_fare = st.slider("Fare", 0.0, 512.0, 32.0)
+    input_embarked = st.selectbox("Port of Embarkation", ["C", "Q", "S"])
 
     if st.button("Calculate Survival Probability"):
         input_data = pd.DataFrame({
@@ -157,11 +172,18 @@ if df is not None:
             'Age': [input_age],
             'SibSp': [input_sibsp],
             'Parch': [input_parch],
-            'Fare': [input_fare]
+            'Fare': [input_fare],
+            'Embarked': [input_embarked]
         })
         
-        input_data['Sex'] = le.transform(input_data['Sex'])
-        survival_prob = rf_model.predict_proba(input_data)[0][1]
+        # Process input data
+        input_data[cat_cols] = input_data[cat_cols].apply(lambda col: le.transform(col.astype(str)))
+        input_data[cat_cols] = cat_imputer.transform(input_data[cat_cols])
+        input_data[num_cols] = num_imputer.transform(input_data[num_cols])
+        
+        input_processed = pd.concat([input_data[cat_cols], input_data[num_cols]], axis=1)
+        
+        survival_prob = rf_model.predict_proba(input_processed)[0][1]
         st.write(f"Survival Probability: {survival_prob:.2%}")
 
     st.sidebar.header("About")
