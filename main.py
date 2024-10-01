@@ -130,7 +130,11 @@ if df is not None:
     y = df['Survived']
 
     le = LabelEncoder()
-    X[cat_cols] = X[cat_cols].apply(lambda col: le.fit_transform(col.astype(str)))
+    le_sex = LabelEncoder()
+    le_sex.fit(df['Sex'])
+
+    X['Embarked'] = le.fit_transform(X['Embarked'].astype(str))
+    X['Sex'] = le_sex.transform(X['Sex'])
 
     cat_imputer = SimpleImputer(strategy='most_frequent')
     num_imputer = SimpleImputer(strategy='median')
@@ -170,7 +174,8 @@ if df is not None:
             'Embarked': [input_embarked]
         })
         
-        input_data[cat_cols] = input_data[cat_cols].apply(lambda col: le.transform(col.astype(str)))
+        input_data['Sex'] = le_sex.transform(input_data['Sex'])
+        input_data['Embarked'] = le.fit_transform(input_data['Embarked'].astype(str))
         input_data[cat_cols] = cat_imputer.transform(input_data[cat_cols])
         input_data[num_cols] = num_imputer.transform(input_data[num_cols])
         
