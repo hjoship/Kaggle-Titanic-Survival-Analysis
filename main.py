@@ -123,32 +123,26 @@ if df is not None:
     st.header("Feature Importance and Survival Probability")
     feature_cols = ['Pclass', 'Sex', 'Age', 'SibSp', 'Parch', 'Fare', 'Embarked']
 
-    # Separate categorical and numerical columns
     cat_cols = ['Sex', 'Embarked']
     num_cols = ['Pclass', 'Age', 'SibSp', 'Parch', 'Fare']
 
     X = df[feature_cols].copy()
     y = df['Survived']
 
-    # Handle categorical data
     le = LabelEncoder()
     X[cat_cols] = X[cat_cols].apply(lambda col: le.fit_transform(col.astype(str)))
 
-    # Impute missing values
     cat_imputer = SimpleImputer(strategy='most_frequent')
     num_imputer = SimpleImputer(strategy='median')
 
     X[cat_cols] = cat_imputer.fit_transform(X[cat_cols])
     X[num_cols] = num_imputer.fit_transform(X[num_cols])
 
-    # Combine processed data
     X_processed = pd.concat([X[cat_cols], X[num_cols]], axis=1)
 
-    # Train the model
     rf_model = RandomForestClassifier(n_estimators=100, random_state=42)
     rf_model.fit(X_processed, y)
 
-    # Feature Importance
     feature_importance = pd.DataFrame({'feature': feature_cols, 'importance': rf_model.feature_importances_})
     feature_importance = feature_importance.sort_values('importance', ascending=False)
     fig_importance = px.bar(feature_importance, x='feature', y='importance', title="Feature Importance")
@@ -176,7 +170,6 @@ if df is not None:
             'Embarked': [input_embarked]
         })
         
-        # Process input data
         input_data[cat_cols] = input_data[cat_cols].apply(lambda col: le.transform(col.astype(str)))
         input_data[cat_cols] = cat_imputer.transform(input_data[cat_cols])
         input_data[num_cols] = num_imputer.transform(input_data[num_cols])
