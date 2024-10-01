@@ -5,16 +5,19 @@ import os
 from kaggle.api.kaggle_api_extended import KaggleApi
 import requests
 import numpy as np
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, AdaBoostClassifier, VotingClassifier
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import LabelEncoder
-
-os.environ['KAGGLE_USERNAME'] = os.environ.get('KAGGLE_USERNAME', '')
-os.environ['KAGGLE_KEY'] = os.environ.get('KAGGLE_KEY', '')
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
 @st.cache_data
 def load_data():
     st.info("Attempting to load the Titanic dataset...")
+    
+    if os.path.exists('titanic.csv'):
+        st.info("Found existing titanic.csv file. Loading data...")
+        return pd.read_csv('titanic.csv')
     
     if os.environ.get('KAGGLE_USERNAME') and os.environ.get('KAGGLE_KEY'):
         try:
@@ -27,13 +30,8 @@ def load_data():
             return pd.read_csv('train.csv')
         except Exception as e:
             st.warning(f"Error using Kaggle API: {str(e)}")
-            st.info("Kaggle authentication failed. Checking for alternative data sources...")
     else:
-        st.warning("Kaggle credentials not found in environment variables. Skipping Kaggle download.")
-    
-    if os.path.exists('train.csv'):
-        st.info("Found existing train.csv file. Loading data...")
-        return pd.read_csv('train.csv')
+        st.warning("Kaggle credentials not found in environment variables.")
     
     st.info("Attempting to download dataset directly...")
     url = "https://raw.githubusercontent.com/datasciencedojo/datasets/master/titanic.csv"
@@ -56,13 +54,18 @@ def load_data():
         'Name': ['John Doe', 'Jane Smith', 'Alice Johnson', 'Bob Brown', 'Charlie Davis', 'Eva Wilson', 'Frank Miller', 'Grace Taylor', 'Henry Anderson', 'Ivy Clark'],
         'Sex': ['male', 'female', 'female', 'male', 'male', 'female', 'male', 'female', 'male', 'female'],
         'Age': [22, 38, 26, 35, 28, 27, 32, 29, 31, 45],
-        'Fare': [7.25, 71.2833, 7.925, 53.1, 8.05, 8.4583, 21.075, 11.1333, 21.0, 30.0708]
+        'SibSp': [1, 1, 0, 0, 0, 0, 1, 0, 2, 1],
+        'Parch': [0, 0, 0, 0, 0, 2, 0, 0, 0, 1],
+        'Fare': [7.25, 71.2833, 7.925, 53.1, 8.05, 8.4583, 21.075, 11.1333, 21.0, 30.0708],
+        'Embarked': ['S', 'C', 'S', 'S', 'Q', 'S', 'S', 'S', 'Q', 'C']
     }
     return pd.DataFrame(sample_data)
 
-df = load_data()
-
+st.set_page_config(layout="wide")
 st.title("Titanic Dataset Analysis")
+st.write("Debug: Starting the app")
+
+df = load_data()
 
 if df is not None:
     st.header("Dataset Information")
@@ -120,7 +123,8 @@ if df is not None:
     fig_age = px.histogram(df_filtered, x='Age', nbins=20, title="Age Distribution")
     st.plotly_chart(fig_age)
 
-    st.header("Feature Importance and Survival Probability")
+    st.header("Ensemble Methods Comparison")
+    st.write("Debug: Entering Ensemble Methods Comparison section")
     feature_cols = ['Pclass', 'Sex', 'Age', 'SibSp', 'Parch', 'Fare', 'Embarked']
 
     cat_cols = ['Sex', 'Embarked']
@@ -144,8 +148,51 @@ if df is not None:
 
     X_processed = pd.concat([X[cat_cols], X[num_cols]], axis=1)
 
+    X_train, X_test, y_train, y_test = train_test_split(X_processed, y, test_size=0.2, random_state=42)
+
+    st.write("Debug: Data preprocessing completed")
+
     rf_model = RandomForestClassifier(n_estimators=100, random_state=42)
-    rf_model.fit(X_processed, y)
+    gb_model = GradientBoostingClassifier(n_estimators=100, random_state=42)
+    ab_model = AdaBoostClassifier(n_estimators=100, random_state=42)
+
+    voting_model = VotingClassifier(
+        estimators=[('rf', rf_model), ('gb', gb_model), ('ab', ab_model)],
+        voting='soft'
+    )
+
+    def evaluate_model(model, X_test, y_test):
+        y_pred = model.predict(X_test)
+        return {
+            'Accuracy': accuracy_score(y_test, y_pred),
+            'Precision': precision_score(y_test, y_pred),
+            'Recall': recall_score(y_test, y_pred),
+            'F1-score': f1_score(y_test, y_pred)
+        }
+
+    models = {
+        'Random Forest': rf_model,
+        'Gradient Boosting': gb_model,
+        'AdaBoost': ab_model,
+        'Voting Classifier': voting_model
+    }
+
+    results = {}
+    progress_bar = st.progress(0)
+    for i, (name, model) in enumerate(models.items()):
+        st.write(f"Debug: Training {name} model")
+        model.fit(X_train, y_train)
+        results[name] = evaluate_model(model, X_test, y_test)
+        progress_bar.progress((i + 1) / len(models))
+
+    st.subheader("Model Performance Comparison")
+    results_df = pd.DataFrame(results).T
+    st.write(results_df)
+
+    fig = px.bar(results_df, barmode='group', title="Model Performance Comparison")
+    st.plotly_chart(fig)
+
+    st.write("Debug: Ensemble Methods Comparison section completed")
 
     feature_importance = pd.DataFrame({'feature': feature_cols, 'importance': rf_model.feature_importances_})
     feature_importance = feature_importance.sort_values('importance', ascending=False)
@@ -181,10 +228,12 @@ if df is not None:
         
         input_processed = pd.concat([input_data[cat_cols], input_data[num_cols]], axis=1)
         
-        survival_prob = rf_model.predict_proba(input_processed)[0][1]
+        survival_prob = voting_model.predict_proba(input_processed)[0][1]
         st.write(f"Survival Probability: {survival_prob:.2%}")
 
     st.sidebar.header("About")
     st.sidebar.info("This Streamlit app analyzes the Titanic dataset. It provides basic information about the dataset, visualizations, filtering options, correlation analysis, feature importance, and a survival probability calculator.")
 else:
     st.error("Failed to load the Titanic dataset. Please check your internet connection and try again.")
+
+st.write("Debug: App execution completed")
