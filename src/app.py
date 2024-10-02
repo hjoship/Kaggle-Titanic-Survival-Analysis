@@ -8,9 +8,8 @@ from src.models import create_models, train_and_evaluate_models, predict_surviva
 from src.utils import filter_dataframe, prepare_input_data
 import src.config as config
 
-st.set_page_config(layout="wide")
-
 def main():
+    st.set_page_config(layout="wide")
     st.title("Titanic Dataset Analysis")
     st.write("Debug: Starting the app")
 
